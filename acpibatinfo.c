@@ -28,14 +28,15 @@ int find_sensordev (const char *name)
   size_t len;
   struct sensordev d;
 
-  while (1) {
+  while (mib[2] < 100) {
+    //printf("find_sensordev(%s) %d\n", name, mib[2]);
     if (sysctl(mib, 3, NULL, &len, NULL, 0) == -1)
-      err(1, "sysctl");
+      err(1, "sysctl 11");
     if (len != sizeof(d))
       err(1, "incompatible size for struct sensordev: %lu instead of %lu",
 	  len, sizeof(d));
     if (sysctl(mib, 3, &d, &len, NULL, 0) == -1)
-      err(1, "sysctl");
+      err(1, "sysctl 12");
     if (strcmp(name, d.xname) == 0)
       return mib[2];
     mib[2]++;
@@ -43,40 +44,85 @@ int find_sensordev (const char *name)
   return 0;
 }
 
-int64_t read_sensor (int dev, int type, int sensor)
+int read_sensor (int64_t *value, int dev, int type, int sensor, const char *name)
 {
   int mib[5] = { CTL_HW, HW_SENSORS, dev, type, sensor };
   size_t len;
   struct sensor s;
 
-  if (sysctl(mib, 5, NULL, &len, NULL, 0) == -1)
-    err(1, "sysctl");
+  if (sysctl(mib, 5, NULL, &len, NULL, 0) == -1) {
+    //warn(name);
+    return 1;
+  }
   if (len != sizeof(s))
     err(1, "incompatible size for struct sensor: %lu instead of %lu",
 	len, sizeof(s));
   if (sysctl(mib, 5, &s, &len, NULL, 0) == -1)
-    err(1, "sysctl");
+    err(1, name);
   //printf("%9llu %s\n", s.value, s.desc);
-  return s.value;
+  *value = s.value;
+  return 0;
+}
+
+typedef struct batinfo {
+  int64_t ac;
+  int64_t remaining;
+  int64_t current;
+  int64_t full;
+  int64_t low;
+} s_batinfo;
+
+int compute_amps() {
+  s_batinfo bi;
+  int dev = find_sensordev("acpiac0");
+  if (read_sensor(&bi.ac, dev, SENSOR_INDICATOR, 0, "acpiac0.indicator0"))
+    return 1;
+  dev = find_sensordev("acpibat0");
+  if (read_sensor(&bi.remaining, dev, SENSOR_AMPHOUR, 3, "acpibat0.amphour3") ||
+      read_sensor(&bi.current, dev, SENSOR_AMPS, 0, "acpibat0.amps3") ||
+      read_sensor(&bi.full, dev, SENSOR_AMPHOUR, 0, "acpibat0.apmhour0") ||
+      read_sensor(&bi.low, dev, SENSOR_AMPHOUR, 2, "acpibat0.apmhour2"))
+    return 1;
+  int charge = (int)((bi.remaining - bi.low) * 100 / (bi.full - bi.low));
+  int time_remaining = bi.current ?
+    (bi.ac ?
+     (int)((bi.full - bi.remaining) * 60 / bi.current) :
+     (int)((bi.remaining - bi.low) * 60 / bi.current)) :
+    0;
+  if (!bi.ac)
+    bi.current = -bi.current;
+  printf("%3d%% %01.2fA %02d:%02d\n", charge,
+	 bi.current / 1000000.0f,
+	 time_remaining / 60, time_remaining % 60);
+  return 0;
+}
+
+int compute_watts() {
+  s_batinfo bi;
+  int dev = find_sensordev("acpiac0");
+  if (read_sensor(&bi.ac, dev, SENSOR_INDICATOR, 0, "acpiac0.indicator0"))
+    return 1;
+  dev = find_sensordev("acpibat0");
+  if (read_sensor(&bi.remaining, dev, SENSOR_WATTHOUR, 3, "acpibat0.watthour3") ||
+      read_sensor(&bi.current, dev, SENSOR_INTEGER, 1, "acpibat0.raw1") ||
+      read_sensor(&bi.full, dev, SENSOR_WATTHOUR, 0, "acpibat0.watthour0") ||
+      read_sensor(&bi.low, dev, SENSOR_WATTHOUR, 2, "acpibat0.watthour2"))
+    return 1;
+  int charge = (int)((bi.remaining - bi.low) * 100 / (bi.full - bi.low));
+  int time_remaining = bi.current ?
+    (bi.ac ?
+     (int)((bi.full - bi.remaining) * 60 / bi.current / 1024) :
+     (int)((bi.remaining - bi.low) * 60 / bi.current / 1024)) :
+    0;
+  if (!bi.ac)
+    bi.current = -bi.current;
+  printf("%3d%% %01.2f %02d:%02d\n", charge,
+	 bi.current / 10000.0f,
+	 time_remaining / 60, time_remaining % 60);
+  return 0;
 }
 
 int main ()
 {
-  int dev = find_sensordev("acpiac0");
-  int64_t ac = read_sensor(dev, SENSOR_INDICATOR, 0);
-  dev = find_sensordev("acpibat0");
-  int64_t remaining = read_sensor(dev, SENSOR_AMPHOUR, 3);
-  int64_t current = read_sensor(dev, SENSOR_AMPS, 0);
-  int64_t full = read_sensor(dev, SENSOR_AMPHOUR, 0);
-  int64_t low = read_sensor(dev, SENSOR_AMPHOUR, 2);
-  int charge = (int)((remaining - low) * 100 / (full - low));
-  int time_remaining = ac ?
-    (int)((full - remaining) * 60 / current) :
-    (int)((remaining - low) * 60 / current);
-  if (!ac)
-    current = -current;
-  printf("%3d%% %01.2fA %02d:%02d\n", charge,
-	 current / 1000000.0f,
-	 time_remaining / 60, time_remaining % 60);
-  return 0;
+  return (!compute_amps() || !compute_watts());
 }

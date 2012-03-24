@@ -9,12 +9,12 @@ int sysctl_acpibat ()
   struct sensor s;
 
   if (sysctl(mib, 5, NULL, &len, NULL, 0) == -1)
-    err(1, "sysctl");
+    err(1, "sysctl 20");
   if (len != sizeof(s))
     err(1, "incompatible size for struct sensor: %d instead of %d",
 	len, sizeof(s));
   if (sysctl(mib, 5, &s, &len, NULL, 0) == -1)
-    err(1, "sysctl");
+    err(1, "sysctl 21");
 
 }
 
