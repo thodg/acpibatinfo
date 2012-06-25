@@ -104,20 +104,20 @@ int compute_watts() {
     return 1;
   dev = find_sensordev("acpibat0");
   if (read_sensor(&bi.remaining, dev, SENSOR_WATTHOUR, 3, "acpibat0.watthour3") ||
-      read_sensor(&bi.current, dev, SENSOR_INTEGER, 1, "acpibat0.raw1") ||
+      read_sensor(&bi.current, dev, SENSOR_WATTS, 0, "acpibat0.power0") ||
       read_sensor(&bi.full, dev, SENSOR_WATTHOUR, 0, "acpibat0.watthour0") ||
       read_sensor(&bi.low, dev, SENSOR_WATTHOUR, 2, "acpibat0.watthour2"))
     return 1;
   int charge = (int)((bi.remaining - bi.low) * 100 / (bi.full - bi.low));
   int time_remaining = bi.current ?
     (bi.ac ?
-     (int)((bi.full - bi.remaining) * 60 / bi.current / 1024) :
-     (int)((bi.remaining - bi.low) * 60 / bi.current / 1024)) :
+     (int)((bi.full - bi.remaining) * 60 / bi.current) :
+     (int)((bi.remaining - bi.low) * 60 / bi.current)) :
     0;
   if (!bi.ac)
     bi.current = -bi.current;
-  printf("%3d%% %01.2f %02d:%02d\n", charge,
-	 bi.current / 10000.0f,
+  printf("%3d%% %01.1fW %02d:%02d\n", charge,
+	 bi.current / 1000000.0f,
 	 time_remaining / 60, time_remaining % 60);
   return 0;
 }
