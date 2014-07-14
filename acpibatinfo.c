@@ -22,6 +22,10 @@
 #include <sys/sysctl.h>
 #include <sys/sensors.h>
 
+struct {
+  int numeric;
+} g_opt = {0};
+
 int find_sensordev (const char *name)
 {
   int mib[3] = { CTL_HW, HW_SENSORS, 0 };
@@ -91,9 +95,14 @@ int compute_amps() {
     0;
   if (!bi.ac)
     bi.current = -bi.current;
-  printf("%3d%% %01.2fA %02d:%02d\n", charge,
-	 bi.current / 1000000.0f,
-	 time_remaining / 60, time_remaining % 60);
+  if (g_opt.numeric)
+    printf("%d %f A %d\n", charge,
+	   bi.current / 1000000.0f,
+	   time_remaining);
+  else
+    printf("%3d%% %01.2fA %02d:%02d\n", charge,
+	   bi.current / 1000000.0f,
+	   time_remaining / 60, time_remaining % 60);
   return 0;
 }
 
@@ -116,13 +125,22 @@ int compute_watts() {
     0;
   if (!bi.ac)
     bi.current = -bi.current;
-  printf("%3d%% %01.1fW %02d:%02d\n", charge,
-	 bi.current / 1000000.0f,
-	 time_remaining / 60, time_remaining % 60);
+  if (g_opt.numeric)
+    printf("%d %f W %d\n", charge,
+	   bi.current / 1000000.0f,
+	   time_remaining);
+  else
+    printf("%3d%% %01.1fW %02d:%02d\n", charge,
+	   bi.current / 1000000.0f,
+	   time_remaining / 60, time_remaining % 60);
   return 0;
 }
 
-int main ()
+int main (int argc, char **argv)
 {
+  if (argc > 1) {
+    if (strcmp("-n", argv[1]) == 0)
+      g_opt.numeric = 1;
+  }
   return (!compute_amps() || !compute_watts());
 }
